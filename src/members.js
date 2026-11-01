@@ -90,7 +90,11 @@ export function normalizeMembers(raw) {
         provider,
         model: String(item.channel?.model ?? '').slice(0, LIMIT.model),
         baseURL: String(item.channel?.baseURL ?? '').slice(0, LIMIT.baseURL),
-        apiKey: String(item.channel?.apiKey ?? '').slice(0, LIMIT.apiKey),
+        // key 里混进空格/换行/引号是最常见的"401 莫名其妙"来源：
+        // 从网页复制时经常带一个尾随换行，肉眼看不出来，服务商就是不认。
+        apiKey: String(item.channel?.apiKey ?? '')
+          .replace(/[\s"']/g, '')
+          .slice(0, LIMIT.apiKey),
       },
     })
   }
