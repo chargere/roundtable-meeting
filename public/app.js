@@ -7,7 +7,7 @@ const $ = (sel) => document.querySelector(sel)
 
 // 改前端的时候把这个号加一，页面上会显示。
 // 用途很实际：分不清"我的改动没生效"和"浏览器还在用旧文件"时，看一眼号码就知道。
-const BUILD = 'v16'
+const BUILD = 'v17'
 
 const ui = {
   list: $('#sessionList'),
@@ -23,6 +23,7 @@ const ui = {
   runBtn: $('#runBtn'),
   sendBtn: $('#sendBtn'),
   exportBtn: $('#exportBtn'),
+  textBtn: $('#textBtn'),
   newBtn: $('#newBtn'),
   trashBtn: $('#trashBtn'),
   membersBtn: $('#membersBtn'),
@@ -1201,6 +1202,75 @@ ui.exportBtn.onclick = () => {
   a.download = `${(state.session.title || '会话').replace(/[\\/:*?"<>|]/g, '_')}.json`
   a.click()
   URL.revokeObjectURL(a.href)
+}
+
+// ---------- 纯文本辩论稿 ----------
+//
+// 跟「导出」的区别：那个是给程序读的 json，这个是给人读的稿子。
+// 不带时间戳、不带评审计数、不带任何标记符号 —— 直接粘进 Word 就能用。
+
+const POS_NAME = ['一辩', '二辩', '三辩', '四辩', '五辩']
+
+function speakerLabel(m, session) {
+  if (m.role === 'user') return '你'
+  if (m.role === 'host') return '主持'
+
+  const name = memberById(m.seatId)?.name ?? m.seatId
+  const seat = session.debate?.sides?.[m.seatId]
+  if (!seat) return name
+
+  const side = seat.side === 'pro' ? '正方' : '反方'
+  const pos = POS_NAME[(Number(seat.order) || 1) - 1] ?? ''
+  return pos ? `${side}·${pos} ${name}` : `${side} ${name}`
+}
+
+function plainTranscript(session) {
+  const d = session.debate ?? {}
+  const out = []
+
+  out.push(`【议题】${session.title || '（没有议题）'}`)
+  if (d.proStance) out.push(`【正方】${d.proStance}`)
+  if (d.conStance) out.push(`【反方】${d.conStance}`)
+  out.push('')
+
+  let round = null
+  for (const m of session.messages ?? []) {
+    if (m.role === 'pass') continue // "过"不进稿子
+    // 开场那句"用户把议题贴了一遍"跟标题重复，稿子里不要
+    if (m.role === 'user' && m.text?.trim() === (session.title ?? '').trim()) continue
+    const r = Number(m.round) || 0
+
+    if (r !== round) {
+      round = r
+      out.push('')
+      out.push('========================================')
+      out.push(r === 0 ? '开场' : `第 ${r} 轮`)
+      out.push('========================================')
+      out.push('')
+    }
+
+    out.push(`${speakerLabel(m, session)}：`)
+    out.push(m.text)
+    out.push('')
+  }
+
+  const spoken = (session.messages ?? []).filter((m) => m.role === 'model' || m.role === 'host').length
+  out.push('----------------------------------------')
+  out.push(`共 ${session.stats?.round ?? '?'} 轮 · ${spoken} 条发言 · 导出于 ${new Date().toLocaleString('zh-CN')}`)
+
+  return out.join('\n')
+}
+
+ui.textBtn.onclick = () => {
+  if (!state.session) return
+  // 开头加 BOM：不加的话老记事本打开中文可能是乱码
+  const blob = new Blob(['\uFEFF' + plainTranscript(state.session)], { type: 'text/plain;charset=utf-8' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `${(state.session.title || '辩论稿').replace(/[\\/:*?"<>|]/g, '_')}.txt`
+  a.click()
+  URL.revokeObjectURL(a.href)
+  toast('辩论稿已导出')
 }
 
 // ---------- 启动 ----------
