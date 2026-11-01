@@ -7,7 +7,7 @@
 
 import { BASE_URL } from './speaker.js'
 
-const TIMEOUT_MS = 20_000
+const TIMEOUT_MS = 12_000
 
 function endpointOf(seat) {
   const ch = seat.channel ?? {}
@@ -35,7 +35,17 @@ export async function listModels(seat) {
     ? { 'x-api-key': ch.apiKey, 'anthropic-version': '2023-06-01' }
     : { Authorization: `Bearer ${ch.apiKey}` }
 
-  const res = await fetch(url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) })
+  // 12 秒。有的平台（比如腾讯 TokenHub）根本没有 /models 这个接口，
+  // 请求会一直挂着不回 —— 等太久不如早点说清楚，让人直接手打模型名。
+  let res
+  try {
+    res = await fetch(url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) })
+  } catch (err) {
+    if (err?.name === 'TimeoutError') {
+      throw new Error(`这家 ${TIMEOUT_MS / 1000} 秒没回，多半不支持列模型。模型名手打就行`)
+    }
+    throw new Error(`连不上：${err.message}`)
+  }
   const raw = await res.text()
 
   if (!res.ok) {

@@ -17,6 +17,9 @@ export const BASE_URL = {
   glm: 'https://open.bigmodel.cn/api/paas/v4',
   doubao: 'https://ark.cn-beijing.volces.com/api/v3',
   hunyuan: 'https://api.hunyuan.cloud.tencent.com/v1',
+  // 腾讯的 MaaS 聚合平台，hy3 这类模型在它上面，不在混元那边。
+  // 两家都是腾讯，但 key 不通用 —— 走错地址就是 401。
+  tokenhub: 'https://tokenhub.tencentmaas.com/v1',
   openai: 'https://api.openai.com/v1',
   anthropic: 'https://api.anthropic.com/v1',
 }
