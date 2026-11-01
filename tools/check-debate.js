@@ -128,7 +128,7 @@ ok(conPrompt.includes('不应当做这个项目'), '反方立场进了 prompt')
   const txt = await fetch(BASE + '/api/run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    // 故意要 5 轮：逐轮确认开着的时候，这个数字应该被忽略
+    // 要 5 轮就该跑 5 轮 —— 勾选框只管"跑完之后问不问"，不该砍掉轮数
     body: JSON.stringify({ sessionId: id, topic: '第一轮开始', preset: '辩论', seed: 7, maxRounds: 5 }),
   }).then((r) => r.text())
 
@@ -136,9 +136,10 @@ ok(conPrompt.includes('不应当做这个项目'), '反方立场进了 prompt')
     .map((x) => JSON.parse(x.slice(6)))
     .find((e) => e.type === 'saved')
 
-  ok(saved?.session?.stats?.step === true, '会话记下了"逐轮确认"')
+  ok(saved?.session?.stats?.step === true, '会话记下了"跑完停下问一句"')
   const added = saved.session.messages.length - before
-  ok(added <= 4, `只要了 5 轮但只走了 1 轮（新增 ${added} 条）`)
+  ok(added > 4, `要 5 轮就连跑 5 轮（新增 ${added} 条）`)
+  ok(/5 轮/.test(saved.session.stats.stopReason), `停止原因：${saved.session.stats.stopReason}`)
 }
 
 // ---------- 主持 AI：每轮开头它说话 ----------
@@ -218,8 +219,8 @@ ok(conPrompt.includes('不应当做这个项目'), '反方立场进了 prompt')
     .map((x) => JSON.parse(x.slice(6)))
     .find((e) => e.type === 'saved')
 
-  ok(saved?.session?.stats?.step === true, '跑起来也认作逐轮确认')
-  ok(saved.session.messages.length - before <= 4, '只要 5 轮，实际只走 1 轮')
+  ok(saved?.session?.stats?.step === true, '跑起来也认作"跑完停下问一句"')
+  ok(saved.session.messages.length - before > 4, `要 5 轮就跑 5 轮（新增 ${saved.session.messages.length - before} 条）`)
 }
 
 await j(`/api/session/${id}`, { method: 'DELETE' })

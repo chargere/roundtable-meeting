@@ -270,7 +270,7 @@ function renderDebate() {
     </label>
     <label class="checkline">
       <input type="checkbox" id="d-step"${d.step !== false ? ' checked' : ''} />
-      <span>逐轮确认：每轮结束停下，等我选下一轮谁先开口</span>
+      <span>跑完之后停下，问我下一轮谁先开口（不管这一趟跑了几轮）</span>
     </label>
     <label>主持 AI
       <select id="d-host">
@@ -490,8 +490,11 @@ function renderFeed() {
 }
 
 function nextBar() {
+  const st = state.session?.stats ?? {}
+  const round = Number(st.round) || '?'
+
   const bar = el('div', 'nextbar')
-  bar.append(el('span', 'nextbar-t', '这一轮结束。下一轮谁先开口？'))
+  bar.append(el('span', 'nextbar-t', `这一趟跑完了（到第 ${round} 轮）。下一轮谁先开口？`))
 
   const pro = el('button', 'ghost sm', '正方先')
   pro.onclick = () => nextRound('pro')

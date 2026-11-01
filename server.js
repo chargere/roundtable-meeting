@@ -510,15 +510,15 @@ async function handleRun(req, res) {
     debateFirst: session.debate?.first ?? 'pro',
   })
 
-  // 逐轮确认：辩论模式下每轮走完就停，把"下一轮谁先开口"交回给人。
-  // 逐轮确认：辩论模式下每轮走完就停，把"下一轮谁先开口"交回给人。
+  // 逐轮确认：每轮走完就停，把"下一轮谁先开口"交回给人。
   // 用 !== false 而不是 === true：老会话没有这个字段，也得按"开"来跑。
+  //
+  // 注意它管的是"跑完这一趟之后要不要问"，不是"只跑一轮"。
+  // 你填的「轮」就是这一趟连跑几轮 —— 两件事各管各的，别再互相覆盖。
   const stepMode = presetName === '辩论' && session.debate?.step !== false
 
-  // 页面上的「最多几轮」压过预设里的默认值。
-  // 不这么写的话，你在界面上填 2，预设还按自己的 6 轮走 —— 输入框就成了摆设。
   let stoppers = preset.stoppers
-  const wanted = stepMode ? 1 : (Number(body.maxRounds) || null)
+  const wanted = Number(body.maxRounds) || null
   if (wanted) {
     stoppers = stoppers.filter((s) => !s.name.startsWith('轮数'))
     stoppers = [byRounds(Math.max(1, Math.min(20, wanted))), ...stoppers]
