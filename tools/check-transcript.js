@@ -1,9 +1,9 @@
-// 辩论稿导出自检：不开浏览器，点一次「辩论稿」，把导出的文本抠出来看。
+// 文稿导出自检：不开浏览器，点一次「文稿」，把导出的文本抠出来逐条对。
 //
 //   node tools/check-transcript.js
 //
-// 为什么值得单独测：这个功能的价值全在"排版对不对"，
-// 而排版错了浏览器里只会安静地下载一个坏文件 —— 不点开根本发现不了。
+// 两种会都要过：辩论（有立场、有辩位）和普通会（只有名字）。
+// 这两条的排版逻辑是分开的，只测一种等于没测。
 
 const BASE = process.env.BASE ?? 'http://127.0.0.1:4173'
 
@@ -56,57 +56,86 @@ function makeEl(tag = 'div') {
   }
 }
 
+let bad = 0
 const ok = (cond, label) => {
   console.log(`${cond ? '✓' : '✗'} ${label}`)
-  if (!cond) process.exitCode = 1
+  if (!cond) bad++
+}
+
+const fs = await import('node:fs/promises')
+
+/** 直接改会话文件塞消息 —— PUT 只收 brief/debate，塞消息走磁盘更快也更真。 */
+async function seed(id, patch) {
+  const file = `sessions/${id}.json`
+  const s = JSON.parse(await fs.readFile(file, 'utf8'))
+  Object.assign(s, patch)
+  await fs.writeFile(file, JSON.stringify(s, null, 2), 'utf8')
+}
+
+async function createSession(title, put = {}) {
+  const r = await (await fetch(BASE + '/api/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  })).json()
+  const id = r.session.id
+  if (put.debate) {
+    await fetch(`${BASE}/api/session/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ debate: put.debate }),
+    })
+  }
+  return id
 }
 
 async function main() {
-  // ---- 先造一场有主持、有辩位、有"过"的辩论 ----
-  const created = await (await fetch(BASE + '/api/session', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: '辩论稿自检' }),
-  })).json()
-  const id = created.session.id
-
   const members = (await (await fetch(BASE + '/api/members')).json()).members
   const a = members[0]
   const b = members[1]
+  const now = Date.now()
 
-  await fetch(`${BASE}/api/session/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      debate: {
-        proStance: '甲方立场',
-        conStance: '乙方立场',
-        first: 'pro',
-        step: true,
-        sides: { [a.id]: { side: 'pro', order: 1 }, [b.id]: { side: 'con', order: 2 } },
-      },
-    }),
+  // ---- 1. 普通会（自由轮）：没有辩论配置 ----
+  const plainId = await createSession('自由轮自检')
+  await seed(plainId, {
+    preset: '自由轮',
+    createdAt: now - 60_000,
+    brief: { text: '这是一段背景资料，用来验证它会不会被写进稿子。' },
+    stats: { round: 2 },
+    messages: [
+      { role: 'user', seatId: 'user', text: '自由轮自检', round: 0, ts: now },
+      { role: 'model', seatId: a.id, text: '我先说两句。', round: 1, ts: now },
+      { role: 'model', seatId: b.id, text: '我不同意。', round: 1, ts: now },
+      { role: 'pass', seatId: b.id, text: '过', round: 2, ts: now },
+      { role: 'model', seatId: a.id, text: '那我说完了。', round: 2, ts: now },
+    ],
   })
 
-  // 直接改会话文件塞消息 —— PUT 只收 brief/debate，塞 messages 更方便直接写盘。
-  // 不花钱跑模型，测的是排版不是模型。
-  const fs = await import('node:fs/promises')
-  const file = `sessions/${id}.json`
-  const s = JSON.parse(await fs.readFile(file, 'utf8'))
-  s.messages = [
-    { role: 'user', text: '辩论稿自检', round: 0, at: Date.now() },
-    { role: 'host', seatId: 'host', text: '承接：开场。\n本轮问双方：为什么？', round: 1, at: Date.now() },
-    { role: 'model', seatId: a.id, text: '正方立论。\n第二行。', round: 1, at: Date.now() },
-    { role: 'model', seatId: b.id, text: '反方立论。', round: 1, at: Date.now() },
-    { role: 'pass', seatId: b.id, text: '过', round: 2, at: Date.now() },
-    { role: 'model', seatId: a.id, text: '第二轮。', round: 2, at: Date.now() },
-  ]
-  s.stats = { ...(s.stats ?? {}), round: 2 }
-  await fs.writeFile(file, JSON.stringify(s, null, 2), 'utf8')
+  // ---- 2. 辩论会：有立场、有辩位 ----
+  const debateId = await createSession('辩论自检', {
+    debate: {
+      proStance: '甲方立场',
+      conStance: '乙方立场',
+      first: 'pro',
+      step: true,
+      sides: { [a.id]: { side: 'pro', order: 1 }, [b.id]: { side: 'con', order: 2 } },
+    },
+  })
+  await seed(debateId, {
+    preset: '辩论',
+    createdAt: now - 30_000,
+    stats: { round: 2 },
+    messages: [
+      { role: 'user', seatId: 'user', text: '辩论自检', round: 0, ts: now },
+      { role: 'host', seatId: 'host', text: '承接：开场。\n本轮问双方：为什么？', round: 1, ts: now },
+      { role: 'model', seatId: a.id, text: '正方立论。\n第二行。', round: 1, ts: now },
+      { role: 'model', seatId: b.id, text: '反方立论。', round: 1, ts: now },
+      { role: 'model', seatId: a.id, text: '第二轮。', round: 2, ts: now },
+    ],
+  })
 
   // ---- 假 DOM ----
-  const { readFile } = await import('node:fs/promises')
-  const html = await readFile('public/index.html', 'utf8')
+  const html = await fs.readFile('public/index.html', 'utf8')
   const ids = new Map()
   for (const m of html.matchAll(/id="([^"]+)"/g)) ids.set(m[1], makeEl('div'))
 
@@ -132,47 +161,64 @@ async function main() {
 
   await import(new URL('../public/app.js', import.meta.url).href)
 
-  // 等会话列表渲染出来
   const list = ids.get('sessionList')
   for (let i = 0; i < 80 && list.children.length === 0; i++) {
     await new Promise((r) => setTimeout(r, 50))
   }
-  ok(list.children.length > 0, `会话列表渲染了 ${list.children.length} 项`)
+  ok(list.children.length >= 2, `会话列表渲染了 ${list.children.length} 项`)
 
-  // 点第一个（最新的就是刚才那场）
-  const firstItem = list.children[0]?.children?.[0]
-  ok(Boolean(firstItem), '列表里第一项能点')
-  await firstItem.dispatch('click')
-  await new Promise((r) => setTimeout(r, 400))
-
-  // ---- 点「辩论稿」 ----
-  await ids.get('textBtn').dispatch('click')
-  ok(Boolean(captured), '点了「辩论稿」之后有文件生成')
-
-  if (captured) {
-    // BOM 得看字节，不能看 text()：Blob.text() 会按规范把开头的 BOM 吃掉，
-    // 所以这里读 arrayBuffer 查 EF BB BF。
+  /** 点列表第 n 项、点「文稿」、把文本拿回来 */
+  async function exportAt(n) {
+    const item = list.children[n]?.children?.[0]
+    if (!item) throw new Error(`列表里没有第 ${n} 项`)
+    await item.dispatch('click')
+    await new Promise((r) => setTimeout(r, 400))
+    captured = null
+    await ids.get('textBtn').dispatch('click')
+    if (!captured) throw new Error('点了「文稿」没有生成文件')
     const bytes = new Uint8Array(await captured.arrayBuffer())
     const bom = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf
-    ok(bom, `文件头是 EF BB BF（实际 ${[...bytes.slice(0, 3)].map((b) => b.toString(16).toUpperCase()).join(' ')}）`)
     const text = await captured.text()
-    ok(text.includes('【议题】辩论稿自检'), '第一行是议题')
-    ok(text.includes('【正方】甲方立场') && text.includes('【反方】乙方立场'), '双方立场都写了')
-    ok(text.includes('第 1 轮') && text.includes('第 2 轮'), '按轮分节')
-    ok(/正方·一辩 .+：/.test(text), `辩位标签：${(text.match(/正方·一辩 .+：/) ?? ['(没有)'])[0]}`)
-    ok(/反方·二辩 .+：/.test(text), '反方的序号也对')
-    ok(!text.includes('过'), '"过"不进稿子')
-    ok(!/\{|\}|"role"/.test(text), '没有 json 残留')
-    ok(text.includes('第二行。'), '多行正文保留了换行')
-
-    console.log('\n---------------- 导出的稿子 ----------------')
-    console.log(text.replace(/^\uFEFF/, ''))
-    console.log('--------------------------------------------')
+    // Blob.text() 会按规范吃掉 BOM，所以要另看字节
+    return { text, bom }
   }
 
-  await fetch(`${BASE}/api/session/${id}`, { method: 'DELETE' })
-  await fetch(`${BASE}/api/trash/${id}`, { method: 'DELETE' })
+  // 最新的在最上面：先辩论、后普通
+  const d = await exportAt(0)
+  ok(d.bom, '辩论稿：文件头是 EF BB BF')
+  ok(d.text.includes('【议题】辩论自检'), '辩论稿：第一行是议题')
+  ok(d.text.includes('【正方】甲方立场') && d.text.includes('【反方】乙方立场'), '辩论稿：双方立场')
+  ok(/正方·一辩 .+：/.test(d.text), `辩论稿：辩位标签 ${(d.text.match(/正方·一辩 .+：/) ?? ['(没有)'])[0]}`)
+  ok(/反方·二辩 .+：/.test(d.text), '辩论稿：反方序号也对')
+  ok(d.text.includes('主持：'), '辩论稿：主持的发言也在')
+  ok(d.text.includes('第 1 轮') && d.text.includes('第 2 轮'), '辩论稿：按轮分节')
+
+  const p = await exportAt(1)
+  ok(p.text.includes('【预设】自由轮'), '普通会：写了预设名')
+  ok(!p.text.includes('【正方】'), '普通会：不硬写正反方')
+  ok(!/正方·|反方·/.test(p.text), '普通会：不出现辩位')
+  ok(/：\n/.test(p.text), '普通会：发言人都有名字')
+  ok(p.text.includes('【背景资料】') && p.text.includes('背景资料，用来验证'), '普通会：背景资料带上了')
+  ok(p.text.includes('【在场】'), '普通会：列了在场的人')
+  ok(!p.text.includes('过\n'), '两种会："过"都不进稿子')
+  ok(!/\{|\}|"role"/.test(p.text), '两种会：没有 json 残留')
+
+  console.log('\n---------------- 普通会的稿子 ----------------')
+  console.log(p.text)
+  console.log('----------------------------------------------')
+
+  await fetch(`${BASE}/api/session/${plainId}`, { method: 'DELETE' })
+  await fetch(`${BASE}/api/trash/${plainId}`, { method: 'DELETE' })
+  await fetch(`${BASE}/api/session/${debateId}`, { method: 'DELETE' })
+  await fetch(`${BASE}/api/trash/${debateId}`, { method: 'DELETE' })
   console.log('\n（临时会话已删）')
+
+  if (bad) {
+    console.log(`\n有 ${bad} 条没过`)
+    process.exitCode = 1
+  } else {
+    console.log('\n文稿导出没问题')
+  }
 }
 
 await main()

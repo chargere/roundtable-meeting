@@ -1204,10 +1204,13 @@ ui.exportBtn.onclick = () => {
   URL.revokeObjectURL(a.href)
 }
 
-// ---------- 纯文本辩论稿 ----------
+// ---------- 纯文本文稿 ----------
 //
 // 跟「导出」的区别：那个是给程序读的 json，这个是给人读的稿子。
 // 不带时间戳、不带评审计数、不带任何标记符号 —— 直接粘进 Word 就能用。
+//
+// 通用：辩论会写立场和辩位，别的会（自由轮、回合制、导入进来的记录）就写名字。
+// 判断依据是"这场有没有辩论配置"，不是按钮叫什么。
 
 const POS_NAME = ['一辩', '二辩', '三辩', '四辩', '五辩']
 
@@ -1215,7 +1218,9 @@ function speakerLabel(m, session) {
   if (m.role === 'user') return '你'
   if (m.role === 'host') return '主持'
 
-  const name = memberById(m.seatId)?.name ?? m.seatId
+  // 成员表里没有这个人也算正常：导入的会话可能来自别人的机器。
+  // 那就退回消息里记的 seatId，至少不会丢发言人。
+  const name = memberById(m.seatId)?.name ?? m.seatId ?? '无名'
   const seat = session.debate?.sides?.[m.seatId]
   if (!seat) return name
 
@@ -1224,17 +1229,45 @@ function speakerLabel(m, session) {
   return pos ? `${side}·${pos} ${name}` : `${side} ${name}`
 }
 
-function plainTranscript(session) {
+function stamp(ts) {
+  const d = new Date(Number(ts) || Date.now())
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+function buildTranscript(session) {
   const d = session.debate ?? {}
+  const msgs = session.messages ?? []
   const out = []
 
+  // ---- 抬头 ----
   out.push(`【议题】${session.title || '（没有议题）'}`)
+  if (session.preset) out.push(`【预设】${session.preset}`)
   if (d.proStance) out.push(`【正方】${d.proStance}`)
   if (d.conStance) out.push(`【反方】${d.conStance}`)
+
+  // 在场的人从消息里推 —— 比查成员表可靠，导入的会话也能列全
+  const who = new Map()
+  for (const m of msgs) {
+    if (m.role !== 'model' && m.role !== 'host' && m.role !== 'user') continue
+    const key = m.seatId ?? m.role
+    if (!who.has(key)) who.set(key, speakerLabel(m, session))
+  }
+  if (who.size) out.push(`【在场】${[...who.values()].join('、')}`)
+  if (session.createdAt) out.push(`【时间】${stamp(session.createdAt)}`)
   out.push('')
 
+  // ---- 背景资料 ----
+  const brief = String(session.brief?.text ?? '').trim()
+  if (brief) {
+    out.push('【背景资料】')
+    out.push(brief)
+    out.push('')
+  }
+
+  // ---- 正文 ----
   let round = null
-  for (const m of session.messages ?? []) {
+  for (const m of msgs) {
     if (m.role === 'pass') continue // "过"不进稿子
     // 开场那句"用户把议题贴了一遍"跟标题重复，稿子里不要
     if (m.role === 'user' && m.text?.trim() === (session.title ?? '').trim()) continue
@@ -1254,9 +1287,9 @@ function plainTranscript(session) {
     out.push('')
   }
 
-  const spoken = (session.messages ?? []).filter((m) => m.role === 'model' || m.role === 'host').length
+  const spoken = msgs.filter((m) => m.role === 'model' || m.role === 'host').length
   out.push('----------------------------------------')
-  out.push(`共 ${session.stats?.round ?? '?'} 轮 · ${spoken} 条发言 · 导出于 ${new Date().toLocaleString('zh-CN')}`)
+  out.push(`共 ${session.stats?.round ?? '?'} 轮 · ${spoken} 条发言 · 导出于 ${stamp(Date.now())}`)
 
   return out.join('\n')
 }
@@ -1264,13 +1297,13 @@ function plainTranscript(session) {
 ui.textBtn.onclick = () => {
   if (!state.session) return
   // 开头加 BOM：不加的话老记事本打开中文可能是乱码
-  const blob = new Blob(['\uFEFF' + plainTranscript(state.session)], { type: 'text/plain;charset=utf-8' })
+  const blob = new Blob(['\uFEFF' + buildTranscript(state.session)], { type: 'text/plain;charset=utf-8' })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = `${(state.session.title || '辩论稿').replace(/[\\/:*?"<>|]/g, '_')}.txt`
+  a.download = `${(state.session.title || '文稿').replace(/[\\/:*?"<>|]/g, '_')}.txt`
   a.click()
   URL.revokeObjectURL(a.href)
-  toast('辩论稿已导出')
+  toast('文稿已导出')
 }
 
 // ---------- 启动 ----------
