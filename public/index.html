@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>查治的圆桌会议</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="side">
+      <div class="brand">
+        查治的圆桌会议
+        <span class="sub">本地 · 假模型</span>
+      </div>
+      <div class="side-label">本地记录</div>
+      <nav class="list" id="sessionList"></nav>
+      <button class="new" id="newBtn">＋ 新会话</button>
+      <button class="trash-link" id="trashBtn">回收站</button>
+      <div class="side-foot">
+        把 .json / .jsonl / .md 拖进窗口，就能载入那段对话。
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="bar">
+        <div class="title" id="title">…</div>
+        <div class="ops">
+          <label class="field">预设<select id="preset"></select></label>
+          <label class="field">种子<input id="seed" type="number" min="1" value="7" /></label>
+          <label class="field" title="最多走几轮">轮<input id="rounds" type="number" min="1" max="20" value="3" /></label>
+          <label class="field" title="每一轮最多几个人发言">每轮<input id="perRound" type="number" min="1" max="9" value="2" /></label>
+          <button id="debateBtn" class="ghost" title="正反方与辩位">辩论</button>
+          <button id="briefBtn" class="ghost" title="这一场的背景资料">资料</button>
+          <button id="membersBtn" class="ghost">成员</button>
+          <button id="exportBtn" class="ghost" title="把当前会话存成 json">导出</button>
+          <button id="stopBtn" class="ghost danger" disabled>停止</button>
+          <button id="runBtn" class="primary">开跑</button>
+        </div>
+      </header>
+
+      <div class="seats" id="seats" title="点一下，这个人这一趟就不参加了"></div>
+
+      <div class="feed" id="feed"></div>
+
+      <footer class="composer">
+        <textarea id="input" rows="1" placeholder="写一个议题，或者接着上一句追问…"></textarea>
+        <button id="sendBtn" class="primary">发言并开跑</button>
+      </footer>
+    </main>
+  </div>
+
+  <div class="drawer" id="drawer">
+    <div class="drawer-head">
+      <strong id="drawerTitle">成员</strong>
+      <button id="drawerClose" class="ghost">关闭</button>
+    </div>
+    <div class="drawer-body" id="drawerBody"></div>
+  </div>
+  <div class="scrim" id="scrim"></div>
+
+  <div class="drop" id="drop">
+    <div class="drop-box">
+      <strong>松手载入</strong>
+      <small>.json / .jsonl / .md</small>
+    </div>
+  </div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
