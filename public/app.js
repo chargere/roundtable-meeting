@@ -7,7 +7,7 @@ const $ = (sel) => document.querySelector(sel)
 
 // 改前端的时候把这个号加一，页面上会显示。
 // 用途很实际：分不清"我的改动没生效"和"浏览器还在用旧文件"时，看一眼号码就知道。
-const BUILD = 'v15'
+const BUILD = 'v16'
 
 const ui = {
   list: $('#sessionList'),
@@ -269,7 +269,7 @@ function renderDebate() {
       </select>
     </label>
     <label class="checkline">
-      <input type="checkbox" id="d-step"${d.step ? ' checked' : ''} />
+      <input type="checkbox" id="d-step"${d.step !== false ? ' checked' : ''} />
       <span>逐轮确认：每轮结束停下，等我选下一轮谁先开口</span>
     </label>
     <label>主持 AI

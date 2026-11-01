@@ -72,8 +72,10 @@ function normalizeDebate(d) {
     proStance: String(d?.proStance ?? '').slice(0, 600),
     conStance: String(d?.conStance ?? '').slice(0, 600),
     first: d?.first === 'con' ? 'con' : 'pro',
-    // 逐轮确认：每轮结束就停，下一轮谁先开口由你来点。
-    step: Boolean(d?.step),
+    // 逐轮确认：每轮结束就停，下一轮谁先开口由人来点。
+    // 默认开 —— "每轮讲完都该问一句"才是这个功能该有的样子；
+    // 老会话里没有这个字段，也按开处理，不然升级之后它永远不生效。
+    step: d?.step !== false,
     // 主持 AI：每轮开头由它定先手、给一句要求。空字符串 = 不用。
     hostId: /^[A-Za-z0-9_-]{1,64}$/.test(String(d?.hostId ?? '')) ? String(d.hostId) : '',
     sides,
@@ -509,7 +511,9 @@ async function handleRun(req, res) {
   })
 
   // 逐轮确认：辩论模式下每轮走完就停，把"下一轮谁先开口"交回给人。
-  const stepMode = presetName === '辩论' && session.debate?.step === true
+  // 逐轮确认：辩论模式下每轮走完就停，把"下一轮谁先开口"交回给人。
+  // 用 !== false 而不是 === true：老会话没有这个字段，也得按"开"来跑。
+  const stepMode = presetName === '辩论' && session.debate?.step !== false
 
   // 页面上的「最多几轮」压过预设里的默认值。
   // 不这么写的话，你在界面上填 2，预设还按自己的 6 轮走 —— 输入框就成了摆设。

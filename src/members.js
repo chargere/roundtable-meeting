@@ -24,6 +24,7 @@ export const PROVIDERS = [
   { id: 'deepseek', label: 'DeepSeek', ready: true },
   { id: 'glm', label: '智谱 GLM', ready: true },
   { id: 'doubao', label: '豆包（火山方舟）', ready: true },
+  { id: 'hunyuan', label: '腾讯混元', ready: true },
   { id: 'openai', label: 'OpenAI 兼容', ready: true },
   { id: 'anthropic', label: 'Anthropic Claude', ready: true },
   { id: 'custom', label: '自定义地址', ready: true },

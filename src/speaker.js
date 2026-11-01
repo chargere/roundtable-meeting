@@ -16,6 +16,7 @@ export const BASE_URL = {
   deepseek: 'https://api.deepseek.com/v1',
   glm: 'https://open.bigmodel.cn/api/paas/v4',
   doubao: 'https://ark.cn-beijing.volces.com/api/v3',
+  hunyuan: 'https://api.hunyuan.cloud.tencent.com/v1',
   openai: 'https://api.openai.com/v1',
   anthropic: 'https://api.anthropic.com/v1',
 }

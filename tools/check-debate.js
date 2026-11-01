@@ -193,6 +193,35 @@ ok(conPrompt.includes('不应当做这个项目'), '反方立场进了 prompt')
   ok(plain.focus === '凭什么成本高还更好', '不是 JSON 也能兜住')
 }
 
+// ---------- 老会话（配置里没有 step 字段）也按"逐轮确认"跑 ----------
+{
+  await j(`/api/session/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      // 故意不传 step —— 模拟升级前存下来的配置
+      debate: { proStance: '应当做', conStance: '不应当做', first: 'pro', sides },
+    }),
+  })
+
+  const cfg = (await j(`/api/session/${id}`)).data.session
+  ok(cfg.debate.step === true, '存的时候补上了 step: true（默认开）')
+
+  const before = cfg.messages.length
+  const txt = await fetch(BASE + '/api/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId: id, topic: '老配置自检', preset: '辩论', seed: 7, maxRounds: 5 }),
+  }).then((r) => r.text())
+
+  const saved = txt.split('\n\n').filter(Boolean)
+    .map((x) => JSON.parse(x.slice(6)))
+    .find((e) => e.type === 'saved')
+
+  ok(saved?.session?.stats?.step === true, '跑起来也认作逐轮确认')
+  ok(saved.session.messages.length - before <= 4, '只要 5 轮，实际只走 1 轮')
+}
+
 await j(`/api/session/${id}`, { method: 'DELETE' })
 await j(`/api/trash/${id}`, { method: 'DELETE' })
 console.log('（临时会话已删）')
