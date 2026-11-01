@@ -7,7 +7,7 @@ const $ = (sel) => document.querySelector(sel)
 
 // 改前端的时候把这个号加一，页面上会显示。
 // 用途很实际：分不清"我的改动没生效"和"浏览器还在用旧文件"时，看一眼号码就知道。
-const BUILD = 'v17'
+const BUILD = 'v18'
 
 const ui = {
   list: $('#sessionList'),
@@ -24,6 +24,7 @@ const ui = {
   sendBtn: $('#sendBtn'),
   exportBtn: $('#exportBtn'),
   textBtn: $('#textBtn'),
+  costbar: $('#costbar'),
   newBtn: $('#newBtn'),
   trashBtn: $('#trashBtn'),
   membersBtn: $('#membersBtn'),
@@ -540,6 +541,7 @@ async function loadSession(id) {
   if (session.preset && state.config.presets.includes(session.preset)) ui.preset.value = session.preset
   if (session.seed) ui.seed.value = session.seed
   renderFeed()
+  renderCost()
   renderSessions()
 }
 
@@ -823,6 +825,13 @@ function renderForm() {
         </span>
       </label>
 
+      <label>单价（元 / 百万 token，留空就不算钱）
+        <span class="range-row">
+          输入<input type="number" id="f-pricein" min="0" step="0.01" value="${Number(d.channel.priceIn) || 0}" />
+          输出<input type="number" id="f-priceout" min="0" step="0.01" value="${Number(d.channel.priceOut) || 0}" />
+        </span>
+      </label>
+
       <div class="hint" id="f-provider-hint"></div>
       <div class="hint" id="f-status"></div>
 
@@ -903,6 +912,9 @@ function renderForm() {
         provider: $n('#f-provider').value,
         model: $n('#f-model').value.trim(),
         baseURL: $n('#f-baseurl').value.trim(),
+        // 单价只用来给页面算钱，不影响调用。0 = 不填 = 不算钱。
+        priceIn: Number($n('#f-pricein').value) || 0,
+        priceOut: Number($n('#f-priceout').value) || 0,
       },
     }
     // 只有真的动过 key 才传 apiKey 字段；
@@ -1088,9 +1100,72 @@ function handleEvent(e, marker) {
     state.session = e.session
     renderTitle()
     refreshSessions()
+    renderCost() // 一轮跑完就把账更新，不用等整场结束
     // 逐轮确认：这一趟走完了，重画一遍，把"下一轮谁先开口"的按钮挂出来。
     if (e.session.stats?.step) renderFeed()
   }
+}
+
+// ---------- 成本可见 ----------
+//
+// 只报两样**实数**：调用次数、token 数（服务商在响应里给的）。
+// 钱是算出来的，所以只在成员里填了单价时才显示 —— 不填就明说算不出来，
+// 不拿一个猜的价格糊弄人。
+
+const nf = new Intl.NumberFormat('zh-CN')
+
+function renderCost() {
+  const st = state.session?.stats
+  const bar = ui.costbar
+  if (!bar) return
+
+  if (!st || !st.calls) {
+    bar.textContent = ''
+    return
+  }
+
+  const t = st.tokens ?? { in: 0, out: 0 }
+  const parts = [`${st.calls} 次调用`]
+
+  if (t.in || t.out) {
+    parts.push(`输入 ${nf.format(t.in)} · 输出 ${nf.format(t.out)} token`)
+  } else {
+    parts.push('token 数没拿到（这家没回 usage）')
+  }
+
+  // 按成员单价算钱：每家的价格不一样，所以要分开算再加总
+  let cost = 0
+  let anyPriced = false
+  const perSeat = []
+  for (const [seatId, b] of Object.entries(st.bySeat ?? {})) {
+    const ch = memberById(seatId)?.channel ?? {}
+    const pin = Number(ch.priceIn) || 0
+    const pout = Number(ch.priceOut) || 0
+    if (!pin && !pout) continue
+    anyPriced = true
+    const c = (b.in / 1e6) * pin + (b.out / 1e6) * pout
+    cost += c
+    perSeat.push(`${memberById(seatId)?.name ?? seatId} ${money(c)}`)
+  }
+
+  if (anyPriced) {
+    parts.push(`≈ ${money(cost)}`)
+    if (perSeat.length > 1) parts.push(`（${perSeat.join(' / ')}）`)
+  } else {
+    parts.push('单价没填，算不出钱')
+  }
+
+  bar.textContent = parts.join(' · ')
+  bar.title = anyPriced
+    ? '钱是按成员里填的单价算的估算值；token 是服务商报的实数'
+    : '在成员的「单价」里填 元/百万 token，这里就会显示花销'
+}
+
+/** 小额要显示到小数点后四位，不然一场几毛钱看起来像 0。 */
+function money(v) {
+  if (v >= 1) return `¥${v.toFixed(2)}`
+  if (v >= 0.01) return `¥${v.toFixed(3)}`
+  return `¥${v.toFixed(4)}`
 }
 
 function appendLine(text, cls = '') {

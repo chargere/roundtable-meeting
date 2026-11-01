@@ -1,4 +1,4 @@
-// 文稿导出自检：不开浏览器，点一次「文稿」，把导出的文本抠出来逐条对。
+﻿// 文稿导出自检：不开浏览器，点一次「文稿」，把导出的文本抠出来逐条对。
 //
 //   node tools/check-transcript.js
 //
@@ -96,14 +96,14 @@ async function main() {
   const now = Date.now()
 
   // ---- 1. 普通会（自由轮）：没有辩论配置 ----
-  const plainId = await createSession('自由轮自检')
+  const plainId = await createSession('茶话会自检')
   await seed(plainId, {
-    preset: '自由轮',
+    preset: '茶话会',
     createdAt: now - 60_000,
     brief: { text: '这是一段背景资料，用来验证它会不会被写进稿子。' },
     stats: { round: 2 },
     messages: [
-      { role: 'user', seatId: 'user', text: '自由轮自检', round: 0, ts: now },
+      { role: 'user', seatId: 'user', text: '茶话会自检', round: 0, ts: now },
       { role: 'model', seatId: a.id, text: '我先说两句。', round: 1, ts: now },
       { role: 'model', seatId: b.id, text: '我不同意。', round: 1, ts: now },
       { role: 'pass', seatId: b.id, text: '过', round: 2, ts: now },
@@ -194,7 +194,7 @@ async function main() {
   ok(d.text.includes('第 1 轮') && d.text.includes('第 2 轮'), '辩论稿：按轮分节')
 
   const p = await exportAt(1)
-  ok(p.text.includes('【预设】自由轮'), '普通会：写了预设名')
+  ok(p.text.includes('【预设】茶话会'), '普通会：写了预设名')
   ok(!p.text.includes('【正方】'), '普通会：不硬写正反方')
   ok(!/正方·|反方·/.test(p.text), '普通会：不出现辩位')
   ok(/：\n/.test(p.text), '普通会：发言人都有名字')

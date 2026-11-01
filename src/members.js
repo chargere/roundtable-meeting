@@ -55,6 +55,12 @@ function seedMembers() {
   return SEATS.map((s) => ({ ...s, rules: [...s.rules], enabled: true, channel: emptyChannel() }))
 }
 
+/** 单价：元 / 百万 token。0 或非法值 = 没填，页面就不会编一个钱数出来。 */
+function clampPrice(v) {
+  const n = Number(v)
+  return Number.isFinite(n) && n > 0 ? Math.min(10_000, n) : 0
+}
+
 /** 把任意来源的数据洗成合法成员：字段补齐、长度截断、数值夹紧、id 去重。 */
 export function normalizeMembers(raw) {
   const list = Array.isArray(raw) ? raw : []
@@ -91,6 +97,9 @@ export function normalizeMembers(raw) {
         provider,
         model: String(item.channel?.model ?? '').slice(0, LIMIT.model),
         baseURL: String(item.channel?.baseURL ?? '').slice(0, LIMIT.baseURL),
+        // 单价：元 / 百万 token。0 表示没填 —— 页面就只报 token，不编钱数。
+        priceIn: clampPrice(item.channel?.priceIn),
+        priceOut: clampPrice(item.channel?.priceOut),
         // key 里混进空格/换行/引号是最常见的"401 莫名其妙"来源：
         // 从网页复制时经常带一个尾随换行，肉眼看不出来，服务商就是不认。
         apiKey: String(item.channel?.apiKey ?? '')
@@ -143,6 +152,9 @@ export function publicMembers(list) {
       provider: m.channel.provider,
       model: m.channel.model,
       baseURL: m.channel.baseURL,
+      // 单价不是秘密，得给页面 —— 页面就是靠它把 token 换算成钱的
+      priceIn: m.channel.priceIn,
+      priceOut: m.channel.priceOut,
       hasKey: Boolean(m.channel.apiKey),
       keyHint: m.channel.apiKey ? `····${m.channel.apiKey.slice(-4)}` : '',
     },

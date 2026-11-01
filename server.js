@@ -539,6 +539,8 @@ async function handleRun(req, res) {
   let onRoundStart = null
   const hostId = presetName === '辩论' ? session.debate?.hostId : ''
   const hostMember = hostId ? roster.find((m) => m.id === hostId) : null
+  // 主持的账要单独记：它不在引擎的座位表里，引擎数不到它。
+  const hostBill = { in: 0, out: 0, calls: 0 }
   if (hostMember) {
     onRoundStart = async (state) => {
       const out = await speaker.speak({
@@ -547,6 +549,11 @@ async function handleRun(req, res) {
         prompt: buildDirectorPrompt(state, session),
         mustSpeak: true,
       })
+      hostBill.calls++
+      if (out.usage) {
+        hostBill.in += Number(out.usage.prompt_tokens) || 0
+        hostBill.out += Number(out.usage.completion_tokens) || 0
+      }
       return parseDirector(out.text)
     }
   }
@@ -575,6 +582,16 @@ async function handleRun(req, res) {
       session.messages = result.state.messages
       session.preset = presetName
       session.seed = seed
+
+      // 把主持的账并进这一场
+      if (hostBill.calls) {
+        result.state.tokens.in += hostBill.in
+        result.state.tokens.out += hostBill.out
+        const b = (result.state.bySeat[hostId] ||= { in: 0, out: 0, calls: 0 })
+        b.in += hostBill.in
+        b.out += hostBill.out
+        b.calls += hostBill.calls
+      }
       session.title = session.messages.find((m) => m.role === 'user')?.text?.slice(0, 40) ?? session.title
       session.stats = {
         calls: result.state.calls,
@@ -584,6 +601,9 @@ async function handleRun(req, res) {
         stopReason: result.stopReason,
         // 这一趟是不是"逐轮确认"模式 —— 页面靠它决定要不要显示"下一轮谁先开口"
         step: stepMode,
+        // 账单：token 是服务商报的实数，钱由页面按成员单价算（价格会变，不写死在这儿）
+        tokens: result.state.tokens,
+        bySeat: result.state.bySeat,
         // 报错也要存进会话。
         // 以前只推给页面，刷新之后就没有了 —— 记录里看起来像"某个人突然不说话"，
         // 到底为什么，只有翻 logs 才知道。

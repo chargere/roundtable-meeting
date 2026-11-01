@@ -133,7 +133,9 @@ async function callOpenAICompatible(seat, prompt, signal) {
     throw err
   }
 
-  return String(text)
+  // usage 是服务商给的账单凭据 —— 没它就估不出这场花了多少。
+  // 有的服务商（尤其是中转站）会省略，那也没关系，只是这场算不出钱。
+  return { text: String(text), usage: data.usage ?? null }
 }
 
 async function callAnthropic(seat, prompt, signal) {
@@ -166,7 +168,10 @@ async function callAnthropic(seat, prompt, signal) {
 
   const text = (data.content ?? []).map((c) => c.text ?? '').join('')
   if (!text.trim()) throw new Error('anthropic 回了空内容')
-  return text
+  // anthropic 的字段名跟 OpenAI 那套不一样，统一成 prompt/completion 再往上走
+  const u = data.usage
+  const usage = u ? { prompt_tokens: u.input_tokens, completion_tokens: u.output_tokens } : null
+  return { text, usage }
 }
 
 export function createSpeaker({ rng, signal = null } = {}) {
@@ -190,16 +195,17 @@ export function createSpeaker({ rng, signal = null } = {}) {
       if (!ch.apiKey) throw new Error(`「${seat.name}」还没填 API Key`)
       if (!ch.model) throw new Error(`「${seat.name}」还没填模型名`)
 
-      const text = ch.provider === 'anthropic'
+      const r = ch.provider === 'anthropic'
         ? await callAnthropic(seat, prompt, guard()).catch((e) => { throw friendlyError(e) })
         : await callOpenAICompatible(seat, prompt, guard()).catch((e) => { throw friendlyError(e) })
 
-      const value = cleanup(text)
+      const usage = r.usage
+      const value = cleanup(r.text)
       if (!value) throw new Error(`「${seat.name}」的回复是空的`)
-      if (isPass(value)) return { pass: true, reason: '模型自己说了「过」' }
+      if (isPass(value)) return { pass: true, reason: '模型自己说了「过」', usage }
 
       // 提示词里要求它一次不超过 120 字，模型经常不听，这里硬截一下，免得刷屏。
-      return { text: value.length > 600 ? `${value.slice(0, 600)}…` : value }
+      return { text: value.length > 600 ? `${value.slice(0, 600)}…` : value, usage }
     },
   }
 }

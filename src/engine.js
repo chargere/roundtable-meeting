@@ -47,6 +47,9 @@ export async function runRoundtable({
     calls: 0,      // 调了多少次模型
     chars: 0,      // 累计多少字
     passes: 0,     // 过了多少次
+    // 账单：token 由服务商在响应里给，我们只负责攒起来
+    tokens: { in: 0, out: 0 },
+    bySeat: {},    // 每个人各花了多少，用来算"谁最贵"
     summary: '',   // 上一轮纪要，给下一轮的 prompt 用
     assess: null,  // 上一轮的打分
     roundQuota,    // 给打分和界面看的
@@ -217,6 +220,20 @@ export async function runRoundtable({
     }
 
     state.calls++
+    // 记账：服务商回多少 token 就记多少。没有 usage 的（有些中转站不给）就只记次数。
+    if (res.usage) {
+      const pin = Number(res.usage.prompt_tokens) || 0
+      const pout = Number(res.usage.completion_tokens) || 0
+      state.tokens.in += pin
+      state.tokens.out += pout
+      const b = (state.bySeat[seat.id] ||= { in: 0, out: 0, calls: 0 })
+      b.in += pin
+      b.out += pout
+    }
+    {
+      const b = (state.bySeat[seat.id] ||= { in: 0, out: 0, calls: 0 })
+      b.calls++
+    }
     log?.call({ round: state.round, seat: seat.id, prompt, response: res })
 
     if (res.pass) {
